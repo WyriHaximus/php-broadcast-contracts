@@ -1,11 +1,12 @@
 {
   "name": "wyrihaximus/broadcast",
-  "license": "MIT",
   "type": "composer-plugin",
+  "description": "✨ Staticly on composer install/update compiled event dispatcher",
+  "license": "MIT",
   "require": {
     "php": "^7.4",
-    "composer-plugin-api": "^1.1",
     "api-clients/rx": "^2.2",
+    "composer-plugin-api": "^1.1",
     "psr/event-dispatcher": "^1.0",
     "psr/log": "^1.0",
     "react/promise": "^2.7",
@@ -24,6 +25,20 @@
     "the-orville/exceptions": "dev-master",
     "wyrihaximus/test-utilities": "^2.2"
   },
+  "config": {
+    "platform": {
+      "php": "7.4"
+    },
+    "sort-packages": true
+  },
+  "extra": {
+    "class": "WyriHaximus\\Broadcast\\Composer\\Installer",
+    "wyrihaximus": {
+      "broadcast": {
+        "has-listeners": true
+      }
+    }
+  },
   "autoload": {
     "psr-4": {
       "WyriHaximus\\Broadcast\\": "src"
@@ -34,29 +49,15 @@
       "WyriHaximus\\Tests\\Broadcast\\": "tests"
     }
   },
-  "config": {
-    "sort-packages": true,
-    "platform": {
-      "php": "7.4"
-    }
-  },
-  "extra": {
-    "class": "WyriHaximus\\Broadcast\\Composer\\Installer",
-    "wyrihaximus": {
-      "broadcast": {
-        "has-listeners": true
-      }
-    }
-  },
   "scripts": {
-    "pre-autoload-dump": [
-      "WyriHaximus\\Broadcast\\Composer\\Installer::findEventListeners"
-    ],
     "post-install-cmd": [
       "composer normalize"
     ],
     "post-update-cmd": [
       "composer normalize"
+    ],
+    "pre-autoload-dump": [
+      "WyriHaximus\\Broadcast\\Composer\\Installer::findEventListeners"
     ]
   }
 }
