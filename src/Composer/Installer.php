@@ -15,7 +15,8 @@ use Roave\BetterReflection\BetterReflection;
 use Roave\BetterReflection\Reflection\ReflectionClass;
 use Roave\BetterReflection\Reflector\ClassReflector;
 use Roave\BetterReflection\Reflector\Exception\IdentifierNotFound;
-use Roave\BetterReflection\SourceLocator\Type\Composer\Factory\MakeLocatorForComposerJson;
+use Roave\BetterReflection\SourceLocator\Type\Composer\Factory\MakeLocatorForComposerJsonAndInstalledJson;
+use Roave\BetterReflection\SourceLocator\Type\Composer\Psr\Exception\InvalidPrefixMapping;
 use Rx\Observable;
 use Throwable;
 use WyriHaximus\Broadcast\Marker\Listener;
@@ -23,22 +24,27 @@ use function ApiClients\Tools\Rx\observableFromArray;
 use function array_key_exists;
 use function count;
 use function dirname;
+use function explode;
 use function file_exists;
 use function is_array;
 use function is_string;
 use function microtime;
 use function round;
+use function rtrim;
 use function Safe\chmod;
 use function Safe\file_get_contents;
 use function Safe\file_put_contents;
+use function Safe\mkdir;
 use function Safe\sprintf;
 use function str_replace;
+use function strpos;
 use function var_export;
 use function WyriHaximus\getIn;
 use function WyriHaximus\iteratorOrArrayToArray;
-use function WyriHaximus\listInstantiatableClassesInDirectories;
+use function WyriHaximus\listClassesInDirectories;
 use const DIRECTORY_SEPARATOR;
 use const WyriHaximus\Constants\Numeric\ONE;
+use const WyriHaximus\Constants\Numeric\ZERO;
 
 final class Installer implements PluginInterface, EventSubscriberInterface
 {
@@ -132,11 +138,16 @@ final class Installer implements PluginInterface, EventSubscriberInterface
      */
     private static function getRegisteredListeners(Composer $composer, IOInterface $io): array
     {
-        $vendorDir      = $composer->getConfig()->get('vendor-dir');
-        $classReflector = (new ClassReflector(
-            (new MakeLocatorForComposerJson())(dirname($vendorDir), (new BetterReflection())->astLocator())
-        ));
-        $classReflector->getAllClasses();
+        $vendorDir = $composer->getConfig()->get('vendor-dir');
+        retry:
+        try {
+            $classReflector = new ClassReflector(
+                (new MakeLocatorForComposerJsonAndInstalledJson())(dirname($vendorDir), (new BetterReflection())->astLocator()),
+            );
+        } catch (InvalidPrefixMapping $invalidPrefixMapping) {
+            mkdir(explode('" is not a', explode('" for prefix "', $invalidPrefixMapping->getMessage())[1])[0]);
+            goto retry;
+        }
 
         $result     = [];
         $packages   = $composer->getRepositoryManager()->getLocalRepository()->getCanonicalPackages();
@@ -180,29 +191,49 @@ final class Installer implements PluginInterface, EventSubscriberInterface
             }
 
             return observableFromArray($paths);
+        })->map(static function (string $path): string {
+            return rtrim($path, '/');
         })->filter(static function (string $path): bool {
             return file_exists($path);
         })->toArray()->flatMap(static function (array $paths): Observable {
-            return observableFromArray(iteratorOrArrayToArray(listInstantiatableClassesInDirectories(...$paths)));
-        })->map(static function (string $class) use ($classReflector): ReflectionClass {
-            return $classReflector->reflect($class);
-        })->filter(static function (ReflectionClass $class) use ($io): bool {
+            return observableFromArray(
+                iteratorOrArrayToArray(
+                    listClassesInDirectories(...$paths)
+                )
+            );
+        })->flatMap(static function (string $class) use ($classReflector, $io): Observable {
             try {
-                return $class->implementsInterface(Listener::class);
+                /** @psalm-suppress PossiblyUndefinedVariable */
+                return observableFromArray([
+                    (static function (ReflectionClass $reflectionClass): ReflectionClass {
+                        $reflectionClass->getInterfaces();
+                        $reflectionClass->getMethods();
+
+                        return $reflectionClass;
+                    })($classReflector->reflect($class)),
+                ]);
             } catch (IdentifierNotFound $identifierNotFound) {
                 $io->write(sprintf(
                     '<info>wyrihaximus/broadcast:</info> Error while reflecting "<fg=cyan>%s</>": <fg=yellow>%s</>',
-                    $class->getName(),
+                    $class,
                     $identifierNotFound->getMessage()
                 ));
             }
 
-            return false;
+            return observableFromArray([]);
+        })->filter(static function (ReflectionClass $class): bool {
+            return $class->isInstantiable();
+        })->filter(static function (ReflectionClass $class): bool {
+            return $class->implementsInterface(Listener::class);
         })->flatMap(static function (ReflectionClass $class): Observable {
             $events = [];
 
             foreach ($class->getMethods() as $method) {
                 if (! $method->isPublic()) {
+                    continue;
+                }
+
+                if (strpos($method->getName(), '__') === ZERO) {
                     continue;
                 }
 
