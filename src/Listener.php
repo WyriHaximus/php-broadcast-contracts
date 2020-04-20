@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace WyriHaximus\Broadcast\Marker;
+namespace WyriHaximus\Broadcast\Contracts;
 
 interface Listener
 {
