@@ -1,2 +1,4 @@
-# php-broadcast
-PSR-14 Event Processing and Notification package
+# Broadcast Contracts
+
+Contracts for [`Broadcast`](https://github.com/wyrihaximus/php-broadcast).
+
