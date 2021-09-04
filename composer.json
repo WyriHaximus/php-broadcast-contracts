@@ -3,7 +3,7 @@
   "description": "✨ Contracts for wyrihaximus/broadcast",
   "license": "MIT",
   "require": {
-    "php": "^7.4"
+    "php": "^8 || ^7.4"
   },
   "config": {
     "platform": {
